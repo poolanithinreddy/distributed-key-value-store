@@ -135,21 +135,22 @@ HttpServer::~HttpServer() { Stop(); }
 
 void HttpServer::Start() {
   if (running_.exchange(true)) return;
-  listen_socket_ = ::socket(AF_INET, SOCK_STREAM, 0);
-  if (listen_socket_ < 0) {
+  const int descriptor = ::socket(AF_INET, SOCK_STREAM, 0);
+  listen_socket_.store(descriptor);
+  if (descriptor < 0) {
     running_ = false;
     throw std::runtime_error("socket creation failed");
   }
   int reuse = 1;
-  ::setsockopt(listen_socket_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+  ::setsockopt(descriptor, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
   sockaddr_in address{};
   address.sin_family = AF_INET;
   address.sin_port = htons(port_);
   if (::inet_pton(AF_INET, host_.c_str(), &address.sin_addr) != 1 ||
-      ::bind(listen_socket_, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
-      ::listen(listen_socket_, 128) != 0) {
-    ::close(listen_socket_);
-    listen_socket_ = -1;
+      ::bind(descriptor, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
+      ::listen(descriptor, 128) != 0) {
+    ::close(descriptor);
+    listen_socket_.store(-1);
     running_ = false;
     throw std::runtime_error("cannot bind HTTP server to " + host_ + ':' + std::to_string(port_));
   }
@@ -158,10 +159,10 @@ void HttpServer::Start() {
 
 void HttpServer::Stop() {
   if (!running_.exchange(false)) return;
-  if (listen_socket_ >= 0) {
-    ::shutdown(listen_socket_, SHUT_RDWR);
-    ::close(listen_socket_);
-    listen_socket_ = -1;
+  const int descriptor = listen_socket_.exchange(-1);
+  if (descriptor >= 0) {
+    ::shutdown(descriptor, SHUT_RDWR);
+    ::close(descriptor);
   }
   if (accept_thread_.joinable()) accept_thread_.join();
   pool_.Stop();
@@ -169,7 +170,9 @@ void HttpServer::Stop() {
 
 void HttpServer::AcceptLoop() {
   while (running_.load()) {
-    const int client = ::accept(listen_socket_, nullptr, nullptr);
+    const int descriptor = listen_socket_.load();
+    if (descriptor < 0) break;
+    const int client = ::accept(descriptor, nullptr, nullptr);
     if (client < 0) {
       if (running_.load() && errno == EINTR) continue;
       break;

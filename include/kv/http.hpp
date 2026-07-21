@@ -52,7 +52,7 @@ class HttpServer {
   ThreadPool pool_;
   std::thread accept_thread_;
   std::atomic<bool> running_{false};
-  int listen_socket_{-1};
+  std::atomic<int> listen_socket_{-1};
 };
 
 HttpClientResponse HttpCall(const std::string& host, std::uint16_t port, const std::string& method,

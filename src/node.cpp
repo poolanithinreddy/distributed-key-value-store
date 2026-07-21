@@ -3,6 +3,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
 #include <regex>
 #include <sstream>
 
@@ -10,6 +11,7 @@
 
 namespace kv {
 namespace {
+std::mutex log_mutex;
 std::optional<std::string> ValueFromBody(const std::string& body) {
   std::smatch match;
   if (!std::regex_search(body, match,
@@ -55,10 +57,12 @@ void Node::Start() {
     running_ = false;
     throw;
   }
-  std::cerr << "{\"timestamp\":\"" << NowIso8601() << "\",\"node_id\":\""
-            << JsonEscape(config_.node_id)
-            << "\",\"event\":\"started\",\"port\":" << config_.listen_port
-            << ",\"recovered_records\":" << storage_.RecoveredRecords() << "}\n";
+  std::ostringstream line;
+  line << "{\"timestamp\":\"" << NowIso8601() << "\",\"node_id\":\"" << JsonEscape(config_.node_id)
+       << "\",\"event\":\"started\",\"port\":" << config_.listen_port
+       << ",\"recovered_records\":" << storage_.RecoveredRecords() << "}\n";
+  std::lock_guard<std::mutex> lock(log_mutex);
+  std::cerr << line.str();
 }
 void Node::Stop() {
   if (!running_.exchange(false)) return;
@@ -74,13 +78,15 @@ HttpResponse Node::Error(int status, ErrorCode code, const std::string& message)
 
 void Node::Log(const std::string& request_id, const std::string& operation, const std::string& key,
                const Result& result, std::uint64_t latency_us) const {
-  std::cerr << "{\"timestamp\":\"" << NowIso8601() << "\",\"node_id\":\""
-            << JsonEscape(config_.node_id) << "\",\"request_id\":\"" << request_id
-            << "\",\"operation\":\"" << operation << "\",\"key_hash\":\"" << std::hex
-            << StableHash(key) << std::dec << "\",\"replicas\":\""
-            << Join(replication_.ReplicaIds(key)) << "\",\"result\":\"" << ErrorName(result.error)
-            << "\",\"acknowledgements\":" << result.acknowledgements
-            << ",\"latency_us\":" << latency_us << "}\n";
+  std::ostringstream line;
+  line << "{\"timestamp\":\"" << NowIso8601() << "\",\"node_id\":\"" << JsonEscape(config_.node_id)
+       << "\",\"request_id\":\"" << request_id << "\",\"operation\":\"" << operation
+       << "\",\"key_hash\":\"" << std::hex << StableHash(key) << std::dec << "\",\"replicas\":\""
+       << Join(replication_.ReplicaIds(key)) << "\",\"result\":\"" << ErrorName(result.error)
+       << "\",\"acknowledgements\":" << result.acknowledgements << ",\"latency_us\":" << latency_us
+       << "}\n";
+  std::lock_guard<std::mutex> lock(log_mutex);
+  std::cerr << line.str();
 }
 
 HttpResponse Node::Handle(const HttpRequest& request) {
