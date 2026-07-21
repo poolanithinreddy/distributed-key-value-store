@@ -1,6 +1,6 @@
 # Distributed Key-Value Store
 
-[![CI](https://github.com/poolanithinreddy/distributed-key-value-store/actions/workflows/ci.yml/badge.svg)](https://github.com/poolanithinreddy/distributed-key-value-store/actions/workflows/ci.yml)
+[![CI: passing](https://github.com/poolanithinreddy/distributed-key-value-store/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/poolanithinreddy/distributed-key-value-store/actions/workflows/ci.yml?query=branch%3Amain)
 
 A real C++17, coordinatorless key-value service built to make distributed-database tradeoffs visible and testable. Any node can coordinate a request; deterministic consistent hashing selects replicas; configurable `N/R/W` quorums tolerate partial failures; checksummed write-ahead logs survive restarts; and periodic probes track peer health.
 
