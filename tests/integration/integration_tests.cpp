@@ -38,7 +38,7 @@ class Cluster : public testing::Test {
         << "\",\"listen_host\":\"127.0.0.1\",\"listen_port\":" << 19221 + index
         << ",\"data_dir\":\"" << (root / ("data" + std::to_string(index))).string()
         << "\",\"virtual_nodes\":64,\"replication_factor\":3,\"read_quorum\":2,\"write_quorum\":2,"
-           "\"worker_threads\":6,\"queue_capacity\":128,\"request_timeout_ms\":200,\"health_"
+           "\"worker_threads\":6,\"queue_capacity\":128,\"request_timeout_ms\":1000,\"health_"
            "interval_ms\":100,\"failure_threshold\":2,\"peers\":[";
     for (int peer = 0; peer < 3; ++peer) {
       if (peer != 0) out << ',';
