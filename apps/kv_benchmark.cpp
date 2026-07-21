@@ -1,3 +1,6 @@
+#include <sys/utsname.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -44,6 +47,12 @@ int main(int argc, char** argv) {
       keyspace == 0)
     return 2;
   const std::string value(value_bytes, 'x');
+  const auto cluster =
+      kv::HttpCall(host, port, "GET", "/v1/cluster", "", std::chrono::milliseconds(3000));
+  if (!cluster.transport_ok || cluster.status != 200) {
+    std::cerr << "cannot read cluster metadata\n";
+    return 1;
+  }
   if (workload != "put") {
     for (std::size_t i = 0; i < keyspace; ++i) {
       const auto response =
@@ -98,7 +107,30 @@ int main(int argc, char** argv) {
   std::sort(results.latency_us.begin(), results.latency_us.end());
   const double throughput = static_cast<double>(results.success + results.errors) / seconds;
   std::ofstream output(output_path);
-  output << "{\n  \"workload\": \"" << workload << "\",\n  \"clients\": " << clients
+  utsname system{};
+  uname(&system);
+  const auto pages = sysconf(_SC_PHYS_PAGES);
+  const auto page_size = sysconf(_SC_PAGESIZE);
+#if defined(__clang__)
+  const std::string compiler = "Clang " + std::string(__clang_version__);
+#elif defined(__GNUC__)
+  const std::string compiler = "GCC " + std::string(__VERSION__);
+#else
+  const std::string compiler = "unknown";
+#endif
+  output << "{\n  \"date\": \"" << kv::NowIso8601() << "\",\n  \"git_commit\": \"" << KV_GIT_COMMIT
+         << "\",\n  \"os\": \"" << kv::JsonEscape(system.sysname) << ' '
+         << kv::JsonEscape(system.release) << ' ' << kv::JsonEscape(system.machine)
+         << "\",\n  \"logical_cpus\": " << std::thread::hardware_concurrency()
+         << ",\n  \"memory_bytes\": " << (pages > 0 && page_size > 0 ? pages * page_size : 0)
+         << ",\n  \"compiler\": \"" << kv::JsonEscape(compiler)
+#ifdef NDEBUG
+         << "\",\n  \"build_type\": \"Release\""
+#else
+         << "\",\n  \"build_type\": \"Debug\""
+#endif
+         << ",\n  \"transport\": \"localhost native processes\",\n  \"cluster\": " << cluster.body
+         << ",\n  \"workload\": \"" << workload << "\",\n  \"clients\": " << clients
          << ",\n  \"warmup_seconds\": " << warmup.count()
          << ",\n  \"measured_seconds\": " << seconds << ",\n  \"keyspace\": " << keyspace
          << ",\n  \"value_bytes\": " << value_bytes << ",\n  \"success\": " << results.success
@@ -111,5 +143,6 @@ int main(int argc, char** argv) {
          << "}\n}\n";
   std::cout << "throughput=" << throughput << " ops/s p95=" << Percentile(results.latency_us, 0.95)
             << "us success=" << results.success << " errors=" << results.errors << '\n';
-  return results.errors == 0 ? 0 : 1;
+  // Transport and quorum failures are measured outcomes, not harness failures.
+  return 0;
 }
