@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    strategy:
+      matrix: {build_type: [Debug, Release]}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  quality:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install analysis tools
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
+      - name: Formatting
+        run: find apps include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 | xargs -0 clang-format --dry-run --Werror
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Static analysis
+        run: run-clang-tidy -p build -quiet '^(?!.*_deps).*(apps|include|src)/.*' 
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ASan and UBSan
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DKV_ENABLE_ASAN=ON
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        env: {ASAN_OPTIONS: "detect_leaks=1:strict_string_checks=1", UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"}
+        run: ctest --test-dir build --output-on-failure
