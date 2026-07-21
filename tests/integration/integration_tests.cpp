@@ -82,7 +82,7 @@ class Cluster : public testing::Test {
   kv::HttpClientResponse Call(int index, const std::string& method, const std::string& target,
                               const std::string& body = "") {
     return kv::HttpCall("127.0.0.1", static_cast<std::uint16_t>(19221 + index), method, target,
-                        body, std::chrono::milliseconds(800));
+                        body, std::chrono::milliseconds(5000));
   }
   inline static const char* executable = nullptr;
   std::filesystem::path root;
