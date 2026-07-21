@@ -1,0 +1,4 @@
+Checks: '-*,bugprone-*,performance-*,portability-*,modernize-use-override,modernize-use-nullptr'
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/kv/.*'
+

@@ -1,0 +1,11 @@
+/build*/
+/data/
+/logs/
+/cluster-logs/
+/benchmarks/results/*.json
+/benchmarks/results/*.csv
+!/benchmarks/results/.gitkeep
+.DS_Store
+.env
+compile_commands.json
+

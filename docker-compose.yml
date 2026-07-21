@@ -1,0 +1,17 @@
+services:
+  node1:
+    build: {context: ., dockerfile: docker/Dockerfile}
+    command: /config/docker-node1.json
+    volumes: ["./config:/config:ro", "node1-data:/home/kv/data/node1"]
+    ports: ["8081:8081"]
+  node2:
+    build: {context: ., dockerfile: docker/Dockerfile}
+    command: /config/docker-node2.json
+    volumes: ["./config:/config:ro", "node2-data:/home/kv/data/node2"]
+    ports: ["8082:8082"]
+  node3:
+    build: {context: ., dockerfile: docker/Dockerfile}
+    command: /config/docker-node3.json
+    volumes: ["./config:/config:ro", "node3-data:/home/kv/data/node3"]
+    ports: ["8083:8083"]
+volumes: {node1-data: {}, node2-data: {}, node3-data: {}}
