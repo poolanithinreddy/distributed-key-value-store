@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <cstring>
 #include <iomanip>
+#include <memory>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -130,7 +131,9 @@ HttpServer::HttpServer(std::string host, std::uint16_t port, std::size_t threads
     : host_(std::move(host)),
       port_(port),
       handler_(std::move(handler)),
-      pool_(threads, queue_capacity) {}
+      connection_pool_(std::max<std::size_t>(2, threads / 2), queue_capacity),
+      public_pool_(threads, queue_capacity),
+      internal_pool_(threads, queue_capacity) {}
 HttpServer::~HttpServer() { Stop(); }
 
 void HttpServer::Start() {
@@ -165,7 +168,9 @@ void HttpServer::Stop() {
     ::close(descriptor);
   }
   if (accept_thread_.joinable()) accept_thread_.join();
-  pool_.Stop();
+  connection_pool_.Stop();
+  public_pool_.Stop();
+  internal_pool_.Stop();
 }
 
 void HttpServer::AcceptLoop() {
@@ -178,7 +183,7 @@ void HttpServer::AcceptLoop() {
       break;
     }
     try {
-      static_cast<void>(pool_.Submit([this, client] { HandleClient(client); }));
+      static_cast<void>(connection_pool_.Submit([this, client] { HandleClient(client); }));
     } catch (const std::exception&) {
       ::close(client);
     }
@@ -186,7 +191,7 @@ void HttpServer::AcceptLoop() {
 }
 
 void HttpServer::HandleClient(int socket) {
-  SocketGuard guard(socket);
+  auto owner = std::make_shared<SocketGuard>(socket);
   timeval timeout{5, 0};
   ::setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
   std::string data;
@@ -219,6 +224,21 @@ void HttpServer::HandleClient(int socket) {
       request.headers[Lower(line.substr(0, colon))] = line.substr(colon + 1);
   }
   request.body = data.substr(header_end + 4, expected);
+  const bool internal = request.target.rfind("/internal/", 0) == 0 || request.target == "/health" ||
+                        request.target == "/ready";
+  auto task = [this, owner, request = std::move(request)]() mutable {
+    ProcessRequest(owner->get(), std::move(request));
+  };
+  try {
+    if (internal)
+      static_cast<void>(internal_pool_.Submit(std::move(task)));
+    else
+      static_cast<void>(public_pool_.Submit(std::move(task)));
+  } catch (const std::exception&) {
+  }
+}
+
+void HttpServer::ProcessRequest(int socket, HttpRequest request) {
   HttpResponse response;
   try {
     response = handler_(request);

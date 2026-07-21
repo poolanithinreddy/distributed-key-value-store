@@ -46,10 +46,13 @@ class HttpServer {
  private:
   void AcceptLoop();
   void HandleClient(int socket);
+  void ProcessRequest(int socket, HttpRequest request);
   std::string host_;
   std::uint16_t port_;
   HttpHandler handler_;
-  ThreadPool pool_;
+  ThreadPool connection_pool_;
+  ThreadPool public_pool_;
+  ThreadPool internal_pool_;
   std::thread accept_thread_;
   std::atomic<bool> running_{false};
   std::atomic<int> listen_socket_{-1};
